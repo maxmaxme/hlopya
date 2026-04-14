@@ -104,6 +104,9 @@ final class SystemAudioTap {
     private let outputFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16000, channels: 1, interleaved: true)!
     private var pendingSamples: [Float] = []
     private let minConvertFrames = 4096
+    private var callbackCount = 0
+    private var totalSamplesReceived = 0
+    private var totalSamplesWritten = 0
 
     init(writer: WAVWriter, targetRate: Int) {
         self.writer = writer
@@ -293,6 +296,18 @@ final class SystemAudioTap {
         pendingSamples.append(contentsOf: UnsafeBufferPointer(start: monoFloats, count: frameCount))
         monoFloats.deallocate()
 
+        callbackCount += 1
+        totalSamplesReceived += frameCount
+        if callbackCount % 500 == 1 {
+            var peak: Float = 0
+            for i in max(0, pendingSamples.count - frameCount)..<pendingSamples.count {
+                let v = abs(pendingSamples[i])
+                if v > peak { peak = v }
+            }
+            NSLog("[SystemAudioTap] callback #%d, received=%d, pending=%d, peak=%.4f, written=%d",
+                  callbackCount, totalSamplesReceived, pendingSamples.count, peak, totalSamplesWritten)
+        }
+
         // Step 3: Only convert when we have enough data
         guard pendingSamples.count >= minConvertFrames else { return }
         flushPendingSamples()
@@ -323,7 +338,11 @@ final class SystemAudioTap {
             return inputBuffer
         }
 
-        guard status != .error, let int16Data = outputBuffer.int16ChannelData, outputBuffer.frameLength > 0 else { return }
+        guard status != .error, let int16Data = outputBuffer.int16ChannelData, outputBuffer.frameLength > 0 else {
+            NSLog("[SystemAudioTap] Converter failed: status=%ld, frameLength=%d", status.rawValue, outputBuffer.frameLength)
+            return
+        }
+        totalSamplesWritten += Int(outputBuffer.frameLength)
         writer.write(samples: Data(bytes: int16Data[0], count: Int(outputBuffer.frameLength) * 2))
     }
 

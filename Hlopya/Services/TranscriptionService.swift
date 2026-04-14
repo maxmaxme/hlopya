@@ -230,25 +230,48 @@ final class TranscriptionService {
         for (i, seg) in segments.enumerated() {
             guard seg.speaker == "Me" else { continue }
 
-            let meWords = Set(seg.text.lowercased().split(separator: " ").map(String.init))
-            guard meWords.count >= 2 else { continue }
+            let meText = seg.text.lowercased()
+            let meWords = meText.split(separator: " ").map(String.init)
+            guard !meWords.isEmpty else { continue }
 
             for them in themSegments {
                 // Must overlap in time (within 5 second window)
                 let timeOverlap = seg.start < them.end + 5 && seg.end > them.start - 5
                 guard timeOverlap else { continue }
 
-                let themWords = Set(them.text.lowercased().split(separator: " ").map(String.init))
-                guard themWords.count >= 2 else { continue }
+                let themText = them.text.lowercased()
+                let themWords = themText.split(separator: " ").map(String.init)
+                guard !themWords.isEmpty else { continue }
 
-                // Word overlap ratio (Jaccard-like, relative to smaller set)
-                let common = meWords.intersection(themWords).count
-                let minSize = min(meWords.count, themWords.count)
-                let overlap = Float(common) / Float(minSize)
-
-                if overlap > 0.5 {
+                // Check 1: exact or near-exact text match (handles short segments like "Okay.")
+                if meText == themText || (meWords.count == 1 && themWords.contains(meWords[0])) {
                     echoIndices.insert(i)
                     break
+                }
+
+                // Check 2: substring containment (echo may be a fragment of a Them segment)
+                if meWords.count >= 2 && themText.contains(meText) {
+                    echoIndices.insert(i)
+                    break
+                }
+                if themWords.count >= 2 && meText.contains(themText) {
+                    echoIndices.insert(i)
+                    break
+                }
+
+                // Check 3: word overlap - use ratio relative to SMALLER set
+                // and also check absolute common word count
+                let meSet = Set(meWords)
+                let themSet = Set(themWords)
+                let common = meSet.intersection(themSet).count
+
+                if common >= 3 {
+                    let minSize = min(meSet.count, themSet.count)
+                    let overlap = Float(common) / Float(minSize)
+                    if overlap > 0.4 {
+                        echoIndices.insert(i)
+                        break
+                    }
                 }
             }
         }
