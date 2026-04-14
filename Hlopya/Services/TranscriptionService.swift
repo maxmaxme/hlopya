@@ -94,10 +94,15 @@ final class TranscriptionService {
         let micSegments = buildSegments(from: micResult, speaker: "Me")
         let sysSegments = buildSegments(from: sysResult, speaker: "Them")
 
-        // Merge and sort by timestamp
+        // Merge, sort, and deduplicate echo segments
         var allSegments = micSegments + sysSegments
         allSegments.sort { $0.start < $1.start }
         allSegments = allSegments.filter { !$0.text.trimmingCharacters(in: CharacterSet.whitespaces).isEmpty }
+        let beforeDedup = allSegments.count
+        allSegments = Self.deduplicateEchoSegments(allSegments)
+        if allSegments.count < beforeDedup {
+            print("[Transcription] Removed \(beforeDedup - allSegments.count) echo duplicate(s)")
+        }
 
         // Build formatted transcript
         let lines = allSegments.map { seg -> String in
@@ -210,6 +215,47 @@ final class TranscriptionService {
         let end = tokens.last?.endTime ?? start
         let avgConfidence = tokens.isEmpty ? nil : tokens.map(\.confidence).reduce(0, +) / Float(tokens.count)
         return TranscriptSegment(speaker: speaker, start: start, end: end, text: text, confidence: avgConfidence)
+    }
+
+    /// Remove "Me" segments that are echo duplicates of nearby "Them" segments.
+    /// The mic picks up speaker output, so the ASR may transcribe the same speech
+    /// as both "Me" and "Them". We detect this by comparing word overlap within
+    /// a time window and drop the "Me" segment (echo is always in the mic channel).
+    private static func deduplicateEchoSegments(_ segments: [TranscriptSegment]) -> [TranscriptSegment] {
+        let themSegments = segments.filter { $0.speaker == "Them" }
+        guard !themSegments.isEmpty else { return segments }
+
+        var echoIndices = Set<Int>()
+
+        for (i, seg) in segments.enumerated() {
+            guard seg.speaker == "Me" else { continue }
+
+            let meWords = Set(seg.text.lowercased().split(separator: " ").map(String.init))
+            guard meWords.count >= 2 else { continue }
+
+            for them in themSegments {
+                // Must overlap in time (within 5 second window)
+                let timeOverlap = seg.start < them.end + 5 && seg.end > them.start - 5
+                guard timeOverlap else { continue }
+
+                let themWords = Set(them.text.lowercased().split(separator: " ").map(String.init))
+                guard themWords.count >= 2 else { continue }
+
+                // Word overlap ratio (Jaccard-like, relative to smaller set)
+                let common = meWords.intersection(themWords).count
+                let minSize = min(meWords.count, themWords.count)
+                let overlap = Float(common) / Float(minSize)
+
+                if overlap > 0.5 {
+                    echoIndices.insert(i)
+                    break
+                }
+            }
+        }
+
+        return segments.enumerated().compactMap { i, seg in
+            echoIndices.contains(i) ? nil : seg
+        }
     }
 
     private func splitIntoSentences(_ text: String) -> [String] {

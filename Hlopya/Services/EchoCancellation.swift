@@ -66,26 +66,29 @@ enum EchoCancellation {
 
         // Compute suppression gains per frame
         var gains = [Float](repeating: 1.0, count: numFrames)
-        let floor: Float = 0.08  // Don't suppress below this to avoid artifacts
+        let floor: Float = 0.02
 
         for i in 0..<numFrames {
-            let sysE = sysEnergy[i] * echoScale * echoScale
+            let sysE = sysEnergy[i]
             let micE = micEnergy[i]
 
             guard sysE > 1e-8 else { continue }
 
-            // Estimated echo energy in mic
-            let echoRatio = sysE / max(micE, 1e-10)
+            // Direct energy comparison: if system is active and mic isn't much louder,
+            // the mic content is likely echo from the speakers
+            let micToSys = micE / max(sysE, 1e-10)
 
-            if echoRatio > 0.8 {
-                // Mic is mostly echo - strong suppression
+            if micToSys < 0.3 {
+                // Mic is quieter than system - almost certainly pure echo
                 gains[i] = floor
-            } else if echoRatio > 0.2 {
-                // Mix of voice + echo - proportional suppression
-                // Wiener-style: keep the portion that isn't echo
-                gains[i] = max(floor, 1.0 - echoRatio)
+            } else if micToSys < 1.5 {
+                // Mic and system similar level - likely echo with some voice
+                gains[i] = max(floor, (micToSys - 0.3) / 1.2)
+            } else if micToSys < 3.0 {
+                // Mic somewhat louder - user may be speaking, gentle suppression
+                gains[i] = max(0.3, (micToSys - 1.5) / 1.5)
             }
-            // else: mic >> system echo, user is speaking, keep full gain
+            // else: mic much louder than system - user is speaking, keep full
         }
 
         // Smooth gains to avoid clicking (median filter + exponential smoothing)
