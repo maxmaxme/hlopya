@@ -156,9 +156,7 @@ struct SessionListView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 6))
 
                 // Settings button
-                Button {
-                    NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-                } label: {
+                SettingsLink {
                     HStack(spacing: 6) {
                         Image(systemName: "gearshape")
                             .font(.system(size: 12))
