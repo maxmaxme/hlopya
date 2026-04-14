@@ -19,15 +19,21 @@ final class TranscriptionService {
     func loadModel() async throws {
         guard !isModelLoaded else { return }
         isDownloading = true
+        downloadProgress = 0
         defer { isDownloading = false }
 
-        let loadedModels = try await AsrModels.downloadAndLoad(version: .v3)
+        let loadedModels = try await AsrModels.downloadAndLoad(version: .v3) { [weak self] progress in
+            DispatchQueue.main.async {
+                self?.downloadProgress = progress.fractionCompleted
+            }
+        }
         models = loadedModels
 
         let manager = AsrManager(config: .default)
         try await manager.loadModels(loadedModels)
         asrManager = manager
 
+        downloadProgress = 1.0
         isModelLoaded = true
         print("[TranscriptionService] Parakeet v3 model loaded")
     }

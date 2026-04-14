@@ -166,6 +166,23 @@ final class NoteGenerationService {
 
         let dateStr = meta?.title != nil ? "" : DateFormatter.localizedString(from: Date(), dateStyle: .short, timeStyle: .none)
 
+        let userName = UserDefaults.standard.string(forKey: "userName").flatMap { $0.isEmpty ? nil : $0 }
+        let meName = userName.map { "Me (\($0))" } ?? "Me"
+
+        let otherParticipants: String
+        if let meetingWith = meta?.meetingWith, !meetingWith.isEmpty {
+            let names = meetingWith.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            otherParticipants = names.joined(separator: ", ")
+        } else if let themName = meta?.participantNames?["Them"], !themName.isEmpty {
+            otherParticipants = themName
+        } else {
+            otherParticipants = "Them"
+        }
+
+        let participantNote = otherParticipants.contains(",")
+            ? "\nNote: The transcript only has \"Me\" and \"Them\" audio channels. \"Them\" includes multiple participants (\(otherParticipants)). Attribute utterances to the correct person based on context when possible."
+            : ""
+
         return """
         \(Self.systemPrompt)
 
@@ -173,7 +190,8 @@ final class NoteGenerationService {
 
         Date: \(dateStr)
         Title: \(meta?.title ?? "Meeting")
-        Known participants: Me (Vadim), Them
+        Known participants: \(meName), \(otherParticipants)
+        \(participantNote)
         \(personalSection)
         ## Transcript
 

@@ -23,6 +23,7 @@ final class AppViewModel {
     var pendingParticipant: String = ""
     var isVocabConfigured = false
     var isConfiguringVocab = false
+    var audioSavedMessage: String?
 
     // Model lifecycle
     private var modelIdleTimer: Task<Void, Never>?
@@ -78,12 +79,33 @@ final class AppViewModel {
         await audioCapture.stopRecording()
         sessionManager.loadSessions()
 
+        audioSavedMessage = "Audio saved. You can safely close the app - processing will resume on next launch."
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(8))
+            if audioSavedMessage != nil { audioSavedMessage = nil }
+        }
+
         if let id = sessionId {
             selectSession(id)
-            // Auto-process if enabled
             if UserDefaults.standard.object(forKey: "autoProcess") == nil || UserDefaults.standard.bool(forKey: "autoProcess") {
+                audioSavedMessage = nil
                 await processSession(id)
             }
+        }
+    }
+
+    func resumeUnprocessedSessions() async {
+        guard !isProcessing else { return }
+        let autoProcess = UserDefaults.standard.object(forKey: "autoProcess") == nil || UserDefaults.standard.bool(forKey: "autoProcess")
+        guard autoProcess else { return }
+
+        let unprocessed = sessionManager.sessions.filter { session in
+            (session.status == .recorded || session.status == .transcribed)
+            && session.hasMic && session.hasSystem
+        }
+        for session in unprocessed {
+            selectSession(session.id)
+            await processSession(session.id)
         }
     }
 

@@ -23,7 +23,7 @@ final class RecordingNubPanel: NSPanel {
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         isOpaque = false
         backgroundColor = .clear
-        hasShadow = true
+        hasShadow = false
         isMovableByWindowBackground = true
 
         if let screen = NSScreen.main {
@@ -127,8 +127,8 @@ private struct NubContent: View {
                 )
         }
         .shimmer(isActive: true)
-        .shadow(color: .black.opacity(0.15), radius: 8, y: 2)
         .fixedSize()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onTapGesture {
             NSApp.activate(ignoringOtherApps: true)
             if let window = NSApp.windows.first(where: { !($0 is NSPanel) }) {

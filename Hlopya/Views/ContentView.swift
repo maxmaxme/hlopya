@@ -34,6 +34,25 @@ struct ContentView: View {
                 emptyState
             }
         }
+        .overlay(alignment: .top) {
+            if let msg = vm.audioSavedMessage {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    Text(msg)
+                        .font(.system(size: 13))
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                .padding(.top, 8)
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .animation(.easeInOut, value: vm.audioSavedMessage)
+            }
+        }
+        .task {
+            await vm.resumeUnprocessedSessions()
+        }
         .background(.ultraThinMaterial)
         .frame(minWidth: 800, minHeight: 500)
         .alert("Recording Error", isPresented: Binding(

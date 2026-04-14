@@ -72,6 +72,7 @@ enum SessionStatus: String, Codable {
 struct SessionMeta: Codable {
     var title: String?
     var participantNames: [String: String]?
+    var meetingWith: String?
     var duration: TimeInterval?
     var participants: [String]?
     var status: String?
@@ -79,6 +80,7 @@ struct SessionMeta: Codable {
     enum CodingKeys: String, CodingKey {
         case title
         case participantNames = "participant_names"
+        case meetingWith = "meeting_with"
         case duration
         case participants
         case status

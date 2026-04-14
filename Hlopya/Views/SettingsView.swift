@@ -6,6 +6,7 @@ struct SettingsView: View {
 
     @AppStorage("outputDir") private var outputDir = "~/recordings"
     @AppStorage("autoProcess") private var autoProcess = true
+    @AppStorage("userName") private var userName = ""
     @AppStorage("claudeModel") private var claudeModel = "claude-sonnet-4-5-20250929"
     @AppStorage("obsidianVault") private var obsidianVault = "~/Documents/MyBrain"
     @AppStorage("setupComplete") private var setupComplete = false
@@ -14,6 +15,14 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            Section("Profile") {
+                TextField("Your Name", text: $userName, prompt: Text("e.g. Vadim"))
+                    .textFieldStyle(.roundedBorder)
+                Text("Used in transcripts as \"Me (your name)\" and passed to AI notes")
+                    .font(HlopTypography.footnote)
+                    .foregroundStyle(.tertiary)
+            }
+
             Section("Recording") {
                 TextField("Output Directory", text: $outputDir)
                     .textFieldStyle(.roundedBorder)
