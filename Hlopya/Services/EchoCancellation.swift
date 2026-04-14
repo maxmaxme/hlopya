@@ -76,19 +76,35 @@ enum EchoCancellation {
         var gains = [Float](repeating: 1.0, count: numFrames)
         let floor: Float = 0.001
 
+        // Precompute: was system audio active within the last 500ms (25 frames)?
+        // Brief inter-word silences are NOT real silences - echo reverb persists.
+        let activityWindow = 25
+        let sysActiveThreshold: Float = sysEnergy.filter({ $0 > 0 }).sorted().dropFirst(sysEnergy.count / 4).first ?? 1e-6
+        var sysRecentlyActive = [Bool](repeating: false, count: numFrames)
+        for i in 0..<numFrames {
+            for offset in 0..<activityWindow {
+                let j = i - offset
+                if j >= 0 && sysEnergy[j] > sysActiveThreshold * 0.1 {
+                    sysRecentlyActive[i] = true
+                    break
+                }
+            }
+        }
+
         for i in 0..<numFrames {
             let sysE = sysEnergy[i]
             let micE = micEnergy[i]
 
-            guard sysE > 1e-8 else { continue }
-
-            let micToSys = micE / max(sysE, 1e-10)
-
-            if micToSys < suppressBelow {
+            if sysE > 1e-8 {
+                let micToSys = micE / max(sysE, 1e-10)
+                if micToSys < suppressBelow {
+                    gains[i] = floor
+                } else if micToSys < fullPassAbove {
+                    let t = (micToSys - suppressBelow) / (fullPassAbove - suppressBelow)
+                    gains[i] = max(floor, t * t)
+                }
+            } else if sysRecentlyActive[i] {
                 gains[i] = floor
-            } else if micToSys < fullPassAbove {
-                let t = (micToSys - suppressBelow) / (fullPassAbove - suppressBelow)
-                gains[i] = max(floor, t)
             }
         }
 
