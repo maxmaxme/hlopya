@@ -62,11 +62,19 @@ enum EchoCancellation {
 
         // Estimate echo-to-mic attenuation from frames where system is active
         let echoScale = estimateEchoScale(micEnergy: micEnergy, sysEnergy: sysEnergy)
-        NSLog("[EchoCancellation] Estimated echo scale: %.3f", echoScale)
 
-        // Compute suppression gains per frame
+        // Adaptive thresholds based on measured echo level.
+        // echoScale is amplitude ratio (mic/sys), so energy ratio = echoScale^2.
+        // When user speaks into mic, energy is typically 10-100x higher than echo.
+        let echoEnergyRatio = echoScale * echoScale
+        let suppressBelow = max(echoEnergyRatio * 5.0, 0.5)
+        let fullPassAbove = max(echoEnergyRatio * 80.0, 8.0)
+
+        NSLog("[EchoCancellation] echoScale=%.3f, energyRatio=%.4f, suppress<%.2f, pass>%.1f",
+              echoScale, echoEnergyRatio, suppressBelow, fullPassAbove)
+
         var gains = [Float](repeating: 1.0, count: numFrames)
-        let floor: Float = 0.02
+        let floor: Float = 0.001
 
         for i in 0..<numFrames {
             let sysE = sysEnergy[i]
@@ -74,21 +82,14 @@ enum EchoCancellation {
 
             guard sysE > 1e-8 else { continue }
 
-            // Direct energy comparison: if system is active and mic isn't much louder,
-            // the mic content is likely echo from the speakers
             let micToSys = micE / max(sysE, 1e-10)
 
-            if micToSys < 0.3 {
-                // Mic is quieter than system - almost certainly pure echo
+            if micToSys < suppressBelow {
                 gains[i] = floor
-            } else if micToSys < 1.5 {
-                // Mic and system similar level - likely echo with some voice
-                gains[i] = max(floor, (micToSys - 0.3) / 1.2)
-            } else if micToSys < 3.0 {
-                // Mic somewhat louder - user may be speaking, gentle suppression
-                gains[i] = max(0.3, (micToSys - 1.5) / 1.5)
+            } else if micToSys < fullPassAbove {
+                let t = (micToSys - suppressBelow) / (fullPassAbove - suppressBelow)
+                gains[i] = max(floor, t)
             }
-            // else: mic much louder than system - user is speaking, keep full
         }
 
         // Smooth gains to avoid clicking (median filter + exponential smoothing)

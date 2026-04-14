@@ -67,6 +67,7 @@ final class AudioCaptureService {
         timer?.invalidate()
         timer = nil
 
+        let sysSamplesWritten = systemTap?.totalSamplesWritten ?? 0
         systemTap?.stop()
         systemTap?.writer.close()
         systemTap = nil
@@ -76,7 +77,13 @@ final class AudioCaptureService {
 
         isRecording = false
         startTime = nil
-        NSLog("[Hlopya] Recording stopped")
+
+        if sysSamplesWritten == 0 && elapsedTime > 2 {
+            lastError = "System audio captured 0 samples - speaker separation will not work for this recording"
+            NSLog("[Hlopya] WARNING: System audio capture produced no samples!")
+        }
+
+        NSLog("[Hlopya] Recording stopped (system samples: %d)", sysSamplesWritten)
     }
 
     var formattedTime: String {
@@ -106,7 +113,8 @@ final class SystemAudioTap {
     private let minConvertFrames = 4096
     private var callbackCount = 0
     private var totalSamplesReceived = 0
-    private var totalSamplesWritten = 0
+    private(set) var totalSamplesWritten = 0
+    private var watchdogTimer: DispatchSourceTimer?
 
     init(writer: WAVWriter, targetRate: Int) {
         self.writer = writer
@@ -234,6 +242,17 @@ final class SystemAudioTap {
             throw AudioCaptureError.systemAudioFailed("Device start failed (error \(err))")
         }
         NSLog("[SystemAudioTap] Capturing system audio")
+
+        // Watchdog: log every 3s so we can diagnose silent-capture failures
+        let wd = DispatchSource.makeTimerSource(queue: queue)
+        wd.schedule(deadline: .now() + 3, repeating: 3)
+        wd.setEventHandler { [weak self] in
+            guard let self else { return }
+            NSLog("[SystemAudioTap] watchdog: callbacks=%d, samplesIn=%d, samplesOut=%d, pending=%d",
+                  self.callbackCount, self.totalSamplesReceived, self.totalSamplesWritten, self.pendingSamples.count)
+        }
+        wd.resume()
+        watchdogTimer = wd
     }
 
     // MARK: - Audio Processing (AVAudioConverter-based with buffering)
@@ -347,14 +366,17 @@ final class SystemAudioTap {
     }
 
     func stop() {
+        watchdogTimer?.cancel()
+        watchdogTimer = nil
         if aggregateDeviceID != kAudioObjectUnknown {
             if let procID = deviceProcID {
                 AudioDeviceStop(aggregateDeviceID, procID)
                 AudioDeviceDestroyIOProcID(aggregateDeviceID, procID)
                 deviceProcID = nil
             }
-            // Flush any remaining buffered samples
-            queue.sync { flushPendingSamples() }
+            queue.sync { self.flushPendingSamples() }
+            NSLog("[SystemAudioTap] Final: callbacks=%d, samplesIn=%d, samplesOut=%d",
+                  callbackCount, totalSamplesReceived, totalSamplesWritten)
             AudioHardwareDestroyAggregateDevice(aggregateDeviceID)
             aggregateDeviceID = kAudioObjectUnknown
         }
