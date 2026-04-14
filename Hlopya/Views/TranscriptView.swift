@@ -140,24 +140,24 @@ struct TranscriptLineView: View {
                 Text(speaker)
                     .font(HlopTypography.body).fontWeight(.semibold)
                     .foregroundStyle(line.isMe ? HlopColors.statusMe : HlopColors.statusThem)
-                    .frame(width: 50, alignment: .trailing)
+                    .frame(width: 80, alignment: .trailing)
             }
 
             if let ts = line.timestamp {
                 Text(formatTimestamp(ts))
                     .font(HlopTypography.monoCaption)
                     .foregroundStyle(.tertiary)
-                    .frame(width: 52, alignment: .leading)
                     .padding(.leading, HlopSpacing.sm)
+                    .frame(width: 60)
             } else {
                 Spacer()
-                    .frame(width: line.displaySpeaker != nil ? 60 : 0)
+                    .frame(width: line.displaySpeaker != nil ? 68 : 0)
             }
 
             Text(line.text)
                 .font(HlopTypography.body)
                 .foregroundStyle(isLowConfidence ? HlopColors.statusWarning : .primary)
-                .padding(.leading, HlopSpacing.xs)
+                .padding(.leading, HlopSpacing.sm)
 
             if let conf = line.confidence {
                 Text("\(Int(conf * 100))%")
