@@ -3,6 +3,8 @@ import SwiftUI
 /// System health & configuration page - model status, downloads, diagnostics
 struct SystemHealthView: View {
     @Environment(AppViewModel.self) private var vm
+    @State private var claudeCliPath: String? = nil
+    @State private var isCheckingClaude = true
 
     var body: some View {
         ScrollView {
@@ -17,11 +19,23 @@ struct SystemHealthView: View {
                 // Vocabulary CTC
                 vocabularyCTCCard
 
+                // Claude CLI
+                claudeCliCard
+
                 // Recording
                 recordingCard
             }
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .task {
+            isCheckingClaude = true
+            let path = await Task.detached {
+                let p = NoteGenerationService.findClaudeCLI()
+                return (p != "claude" && FileManager.default.isExecutableFile(atPath: p)) ? p : nil
+            }.value
+            claudeCliPath = path
+            isCheckingClaude = false
         }
     }
 
@@ -132,6 +146,69 @@ struct SystemHealthView: View {
                     .buttonStyle(.borderedProminent)
                 } else {
                     GlassBadge(text: "EMPTY", color: .secondary)
+                }
+            }
+        }
+        .padding(16)
+        .background {
+            RoundedRectangle(cornerRadius: 10)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(.white.opacity(0.1), lineWidth: 0.5)
+                )
+        }
+    }
+
+    // MARK: - Claude CLI
+
+    private var claudeCliCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("AI Notes", systemImage: "brain")
+                .font(.system(size: 15, weight: .semibold))
+
+            HStack(spacing: 12) {
+                if isCheckingClaude {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(width: 10, height: 10)
+                } else {
+                    statusDot(ok: claudeCliPath != nil)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Claude Code CLI")
+                        .font(.system(size: 13, weight: .medium))
+
+                    if isCheckingClaude {
+                        Text("Checking...")
+                            .font(HlopTypography.footnote)
+                            .foregroundStyle(.secondary)
+                    } else if let path = claudeCliPath {
+                        Text(path)
+                            .font(HlopTypography.footnote)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    } else {
+                        Text("Not installed - AI notes disabled")
+                            .font(HlopTypography.footnote)
+                            .foregroundStyle(.orange)
+                    }
+                }
+
+                Spacer()
+
+                if isCheckingClaude {
+                    EmptyView()
+                } else if claudeCliPath != nil {
+                    GlassBadge(text: "OK", color: HlopColors.statusDone)
+                } else {
+                    Button("Install") {
+                        NSWorkspace.shared.open(URL(string: "https://docs.anthropic.com/en/docs/claude-code/overview")!)
+                    }
+                    .controlSize(.small)
+                    .buttonStyle(.borderedProminent)
                 }
             }
         }
