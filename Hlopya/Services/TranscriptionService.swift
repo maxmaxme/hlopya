@@ -83,6 +83,9 @@ final class TranscriptionService {
             systemSamples: sysSamples
         )
 
+        // Save cleaned mic waveform for display (200 floats = 800 bytes)
+        Self.saveWaveform(cleanedMic, buckets: 200, to: sessionDir.appendingPathComponent("mic_waveform.bin"))
+
         // Transcribe both channels
         print("[Transcription] Transcribing mic (Me)...")
         let micResult = try await asr.transcribe(cleanedMic, source: .microphone)
@@ -283,6 +286,30 @@ final class TranscriptionService {
         return segments.enumerated().compactMap { i, seg in
             echoIndices.contains(i) ? nil : seg
         }
+    }
+
+    private static func saveWaveform(_ samples: [Float], buckets: Int, to url: URL) {
+        guard !samples.isEmpty else { return }
+        let perBucket = samples.count / buckets
+        guard perBucket > 0 else { return }
+
+        var waveform = [Float](repeating: 0, count: buckets)
+        for i in 0..<buckets {
+            var peak: Float = 0
+            let start = i * perBucket
+            for j in start..<min(start + perBucket, samples.count) {
+                let v = abs(samples[j])
+                if v > peak { peak = v }
+            }
+            waveform[i] = peak
+        }
+        let maxPeak = waveform.max() ?? 0
+        if maxPeak > 0.001 {
+            for i in 0..<buckets { waveform[i] /= maxPeak }
+        }
+
+        let data = waveform.withUnsafeBufferPointer { Data(buffer: $0) }
+        try? data.write(to: url)
     }
 
     private func splitIntoSentences(_ text: String) -> [String] {

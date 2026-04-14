@@ -30,11 +30,23 @@ final class AudioPlayerService {
             let sampleRate = mic.processingFormat.sampleRate
             duration = Double(max(mic.length, sys.length)) / sampleRate
 
-            micWaveform = Self.extractWaveform(from: mic, buckets: 200)
+            // Use echo-suppressed waveform if available, otherwise raw
+            let cleanedWaveformURL = micURL.deletingLastPathComponent().appendingPathComponent("mic_waveform.bin")
+            if let saved = Self.loadSavedWaveform(from: cleanedWaveformURL, buckets: 200) {
+                micWaveform = saved
+            } else {
+                micWaveform = Self.extractWaveform(from: mic, buckets: 200)
+            }
             systemWaveform = Self.extractWaveform(from: sys, buckets: 200)
         } catch {
             print("[AudioPlayer] Failed to load: \(error)")
         }
+    }
+
+    private static func loadSavedWaveform(from url: URL, buckets: Int) -> [Float]? {
+        guard let data = try? Data(contentsOf: url),
+              data.count == buckets * MemoryLayout<Float>.size else { return nil }
+        return data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
     }
 
     func togglePlayPause() {
