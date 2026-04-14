@@ -25,7 +25,7 @@ final class TranscriptionService {
         models = loadedModels
 
         let manager = AsrManager(config: .default)
-        try await manager.initialize(models: loadedModels)
+        try await manager.loadModels(loadedModels)
         asrManager = manager
 
         isModelLoaded = true
@@ -42,15 +42,13 @@ final class TranscriptionService {
     }
 
     /// Configure vocabulary boosting with CTC rescoring
+    /// Note: vocabulary boosting requires SlidingWindowAsrManager (streaming mode).
+    /// Currently a no-op for offline transcription via AsrManager.
     func configureVocabulary(context: CustomVocabularyContext) async throws {
-        guard let asr = asrManager else {
+        guard asrManager != nil else {
             throw TranscriptionError.modelNotLoaded
         }
-
-        print("[TranscriptionService] Loading CTC model for vocabulary boosting...")
-        let ctcModels = try await CtcModels.downloadAndLoad()
-        try await asr.configureVocabularyBoosting(vocabulary: context, ctcModels: ctcModels)
-        print("[TranscriptionService] Vocabulary boosting configured with \(context.terms.count) terms")
+        print("[TranscriptionService] Vocabulary boosting not available in offline mode (requires SlidingWindowAsrManager)")
     }
 
     /// Transcribe a complete meeting from mic.wav and system.wav

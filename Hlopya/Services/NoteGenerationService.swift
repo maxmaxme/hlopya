@@ -28,9 +28,18 @@ final class NoteGenerationService {
         process.executableURL = URL(fileURLWithPath: claudePath)
         process.arguments = ["-p", "--model", model, "--output-format", "text"]
 
-        // Remove CLAUDECODE env var to avoid nested session error
+        // Fix environment for GUI-launched app:
+        // - Remove CLAUDECODE to avoid nested session error
+        // - Ensure PATH includes Homebrew/local dirs so `env node` shebang works
         var env = ProcessInfo.processInfo.environment
         env.removeValue(forKey: "CLAUDECODE")
+        let extraPaths = ["/opt/homebrew/bin", "/usr/local/bin",
+                          "\(FileManager.default.homeDirectoryForCurrentUser.path)/.local/bin"]
+        let currentPath = env["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+        let missing = extraPaths.filter { !currentPath.contains($0) }
+        if !missing.isEmpty {
+            env["PATH"] = currentPath + ":" + missing.joined(separator: ":")
+        }
         process.environment = env
 
         let inputPipe = Pipe()
