@@ -6,7 +6,7 @@ ENTITLEMENTS = Hlopya/Hlopya.entitlements
 .PHONY: build install clean run debug fix-entitlements release
 
 fix-entitlements:
-	@printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n\t<key>com.apple.security.device.audio-input</key>\n\t<true/>\n\t<key>com.apple.security.app-sandbox</key>\n\t<false/>\n</dict>\n</plist>\n' > $(ENTITLEMENTS)
+	@printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n\t<key>com.apple.security.device.audio-input</key>\n\t<true/>\n\t<key>com.apple.security.app-sandbox</key>\n\t<false/>\n\t<key>com.apple.security.get-task-allow</key>\n\t<false/>\n</dict>\n</plist>\n' > $(ENTITLEMENTS)
 
 build: fix-entitlements
 	@echo "Generating Xcode project..."
