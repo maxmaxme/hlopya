@@ -4,6 +4,7 @@ import SwiftUI
 struct HlopyaApp: App {
     @State private var viewModel = AppViewModel()
     @AppStorage("setupComplete") private var setupComplete = false
+    @AppStorage("autoRecordCalls") private var autoRecordCalls = false
     @AppStorage("showDockIcon") private var showDockIcon = true
     @AppStorage("showMenuBar") private var showMenuBar = true
 
@@ -64,6 +65,11 @@ struct HlopyaApp: App {
                 }
                 .keyboardShortcut("r", modifiers: .command)
             }
+            Divider()
+            Toggle("Auto-record calls", isOn: Binding(
+                get: { autoRecordCalls },
+                set: { autoRecordCalls = $0; viewModel.callDetection.isEnabled = $0 }
+            ))
             Divider()
             Button("Show Window") {
                 NSApp.activate(ignoringOtherApps: true)

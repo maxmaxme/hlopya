@@ -7,6 +7,7 @@ struct SettingsView: View {
 
     @AppStorage("outputDir") private var outputDir = "~/recordings"
     @AppStorage("autoProcess") private var autoProcess = true
+    @AppStorage("autoRecordCalls") private var autoRecordCalls = false
     @AppStorage("userName") private var userName = ""
     @AppStorage("claudeModel") private var claudeModel = "sonnet"
     @AppStorage("obsidianVault") private var obsidianVault = "~/Documents/MyBrain"
@@ -32,6 +33,13 @@ struct SettingsView: View {
                 FolderPickerField(label: "Output Directory", path: $outputDir)
                 Toggle("Auto-process after recording", isOn: $autoProcess)
                 Text("Automatically transcribe and generate AI notes when recording stops")
+                    .font(HlopTypography.footnote)
+                    .foregroundStyle(.tertiary)
+                Toggle("Auto-record calls", isOn: Binding(
+                    get: { autoRecordCalls },
+                    set: { autoRecordCalls = $0; vm.callDetection.isEnabled = $0 }
+                ))
+                Text("Start recording automatically when Zoom, Meet, FaceTime or another app grabs the microphone")
                     .font(HlopTypography.footnote)
                     .foregroundStyle(.tertiary)
             }
