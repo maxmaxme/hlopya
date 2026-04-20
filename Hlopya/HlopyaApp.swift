@@ -4,6 +4,8 @@ import SwiftUI
 struct HlopyaApp: App {
     @State private var viewModel = AppViewModel()
     @AppStorage("setupComplete") private var setupComplete = false
+    @AppStorage("showDockIcon") private var showDockIcon = true
+    @AppStorage("showMenuBar") private var showMenuBar = true
 
     init() {
         // Workaround: suppress re-entrant constraint update assertion crash.
@@ -11,6 +13,17 @@ struct HlopyaApp: App {
         // triggers setNeedsUpdateConstraints during a display cycle.
         // See: https://github.com/utmapp/UTM/issues/4691
         UserDefaults.standard.set(false, forKey: "NSWindowAssertWhenDisplayCycleLimitReached")
+
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: "showDockIcon") == nil {
+            defaults.set(true, forKey: "showDockIcon")
+        }
+        if defaults.object(forKey: "showMenuBar") == nil {
+            defaults.set(true, forKey: "showMenuBar")
+        }
+        if !defaults.bool(forKey: "showDockIcon") {
+            NSApplication.shared.setActivationPolicy(.accessory)
+        }
     }
 
     var body: some Scene {
@@ -36,7 +49,7 @@ struct HlopyaApp: App {
         }
 
         // Menu bar
-        MenuBarExtra("Hlopya", systemImage: "mic.circle.fill") {
+        MenuBarExtra("Hlopya", systemImage: "mic.circle.fill", isInserted: $showMenuBar) {
             if viewModel.audioCapture.isRecording {
                 Text("Recording: \(viewModel.audioCapture.formattedTime)")
                     .font(.caption)
