@@ -1,3 +1,4 @@
+import ServiceManagement
 import SwiftUI
 
 /// App preferences
@@ -14,6 +15,8 @@ struct SettingsView: View {
     @AppStorage("showMenuBar") private var showMenuBar = true
     @State private var claudeCliPath: String? = nil
     @State private var isCheckingClaude = true
+    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+    @State private var launchAtLoginError: String? = nil
 
     var body: some View {
         Form {
@@ -51,6 +54,31 @@ struct SettingsView: View {
                 Text("At least one of Dock or menu bar must stay visible so Hlopya remains accessible.")
                     .font(HlopTypography.footnote)
                     .foregroundStyle(.tertiary)
+
+                Toggle("Launch at login", isOn: $launchAtLogin)
+                    .onChange(of: launchAtLogin) { _, newValue in
+                        do {
+                            if newValue {
+                                try SMAppService.mainApp.register()
+                            } else {
+                                try SMAppService.mainApp.unregister()
+                            }
+                            launchAtLoginError = nil
+                        } catch {
+                            launchAtLoginError = error.localizedDescription
+                            // Revert the toggle to reflect actual state.
+                            launchAtLogin = SMAppService.mainApp.status == .enabled
+                        }
+                    }
+                if let err = launchAtLoginError {
+                    Text(err)
+                        .font(HlopTypography.footnote)
+                        .foregroundStyle(.orange)
+                } else if SMAppService.mainApp.status == .requiresApproval {
+                    Text("Approve Hlopya in System Settings → General → Login Items to enable launch at login.")
+                        .font(HlopTypography.footnote)
+                        .foregroundStyle(.orange)
+                }
             }
 
             Section("Transcription") {
