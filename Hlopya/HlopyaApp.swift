@@ -28,7 +28,7 @@ struct HlopyaApp: App {
 
     var body: some Scene {
         // Main window
-        WindowGroup {
+        WindowGroup(id: "main") {
             if setupComplete {
                 ContentView()
                     .environment(viewModel)
@@ -50,6 +50,23 @@ struct HlopyaApp: App {
 
         // Menu bar
         MenuBarExtra("Hlopya", systemImage: "mic.circle.fill", isInserted: $showMenuBar) {
+            MenuBarContent(viewModel: viewModel)
+        }
+
+        // Settings
+        Settings {
+            SettingsView()
+                .environment(viewModel)
+        }
+    }
+}
+
+private struct MenuBarContent: View {
+    let viewModel: AppViewModel
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Group {
             if viewModel.audioCapture.isRecording {
                 Text("Recording: \(viewModel.audioCapture.formattedTime)")
                     .font(.caption)
@@ -66,8 +83,9 @@ struct HlopyaApp: App {
             }
             Divider()
             Button("Show Window") {
+                openWindow(id: "main")
                 NSApp.activate(ignoringOtherApps: true)
-                if let window = NSApp.windows.first(where: { !($0 is NSPanel) }) {
+                if let window = NSApp.windows.first(where: { !($0 is NSPanel) && $0.canBecomeKey }) {
                     window.makeKeyAndOrderFront(nil)
                 }
             }
@@ -84,12 +102,6 @@ struct HlopyaApp: App {
                 }
             }
             .keyboardShortcut("q", modifiers: .command)
-        }
-
-        // Settings
-        Settings {
-            SettingsView()
-                .environment(viewModel)
         }
     }
 }
