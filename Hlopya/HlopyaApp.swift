@@ -51,7 +51,7 @@ struct HlopyaApp: App {
 
         // Menu bar
         MenuBarExtra("Hlopya", systemImage: "mic.circle.fill", isInserted: $showMenuBar) {
-            MenuBarContent(viewModel: viewModel)
+            MenuBarContent(viewModel: viewModel, autoRecordCalls: $autoRecordCalls)
         }
 
         // Settings
@@ -64,6 +64,7 @@ struct HlopyaApp: App {
 
 private struct MenuBarContent: View {
     let viewModel: AppViewModel
+    @Binding var autoRecordCalls: Bool
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
