@@ -12,6 +12,15 @@ final class AppViewModel {
     let noteGeneration = NoteGenerationService()
     let obsidianExporter = ObsidianExporter()
     let vocabularyService = VocabularyService()
+    let callDetection = CallDetectionService()
+
+    var autoRecordCalls: Bool {
+        get { UserDefaults.standard.object(forKey: "autoRecordCalls") as? Bool ?? false }
+        set {
+            UserDefaults.standard.set(newValue, forKey: "autoRecordCalls")
+            callDetection.isEnabled = newValue
+        }
+    }
 
     // State
     var selectedSessionId: String?
@@ -44,6 +53,14 @@ final class AppViewModel {
         sessionManager.sessions.first { $0.id == selectedSessionId }
     }
 
+    init() {
+        callDetection.onCallDetected = { [weak self] in
+            guard let self, !self.audioCapture.isRecording else { return }
+            Task { @MainActor in await self.startRecording() }
+        }
+        callDetection.isEnabled = UserDefaults.standard.object(forKey: "autoRecordCalls") as? Bool ?? false
+    }
+
     // MARK: - Recording
 
     func startRecording() async {
@@ -60,6 +77,7 @@ final class AppViewModel {
             // Select session immediately so UI shows the new session
             selectSession(session.id)
             NSLog("[Hlopya] Starting recording at %@", session.directoryURL.path)
+            callDetection.isOwnRecording = true
             try await audioCapture.startRecording(sessionDir: session.directoryURL)
             NSLog("[Hlopya] Recording started OK")
             showNub()
@@ -67,6 +85,7 @@ final class AppViewModel {
             let msg = error.localizedDescription
             NSLog("[Hlopya] Recording FAILED: %@", msg)
             audioCapture.lastError = msg
+            callDetection.isOwnRecording = false
             if let id = createdSessionId {
                 try? sessionManager.deleteSession(id)
             }
@@ -77,6 +96,7 @@ final class AppViewModel {
         hideNub()
         let sessionId = selectedSessionId
         await audioCapture.stopRecording()
+        callDetection.isOwnRecording = false
         sessionManager.loadSessions()
 
         audioSavedMessage = "Audio saved. You can safely close the app - processing will resume on next launch."
