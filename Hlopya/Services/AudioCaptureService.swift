@@ -395,8 +395,11 @@ final class SystemAudioTap {
 
 final class MicRecorder {
     let writer: WAVWriter
-    let engine = AVAudioEngine()
+    var engine = AVAudioEngine()
     let targetRate: Int
+    private var configChangeObserver: NSObjectProtocol?
+    private var isStopped = false
+    private var totalSamplesWritten = 0
 
     init(writer: WAVWriter, targetRate: Int) {
         self.writer = writer
@@ -404,10 +407,30 @@ final class MicRecorder {
     }
 
     func start() throws {
+        try installTapAndStart()
+
+        // AVAudioEngine stops its input tap when the underlying hardware format changes
+        // (e.g. when the system-audio aggregate device is created, or headphones are plugged in).
+        // Re-install the tap and restart the engine whenever this happens, otherwise the mic
+        // stops recording after ~1s and only the system track gets captured.
+        configChangeObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self, !self.isStopped else { return }
+            NSLog("[MicRecorder] Configuration change — restarting mic tap (written so far: %d samples)", self.totalSamplesWritten)
+            self.restart()
+        }
+    }
+
+    private func installTapAndStart() throws {
         let node = engine.inputNode
         let fmt = node.outputFormat(forBus: 0)
         let outFmt = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: Double(targetRate), channels: 1, interleaved: true)!
-        let converter = AVAudioConverter(from: fmt, to: outFmt)!
+        guard let converter = AVAudioConverter(from: fmt, to: outFmt) else {
+            throw AudioCaptureError.systemAudioFailed("Failed to create mic audio converter (input format: \(fmt))")
+        }
 
         node.installTap(onBus: 0, bufferSize: 4096, format: fmt) { [weak self] buf, _ in
             guard let self else { return }
@@ -423,16 +446,37 @@ final class MicRecorder {
 
             if let ch = out.int16ChannelData, out.frameLength > 0 {
                 self.writer.write(samples: Data(bytes: ch[0], count: Int(out.frameLength) * 2))
+                self.totalSamplesWritten += Int(out.frameLength)
             }
         }
 
         try engine.start()
     }
 
+    private func restart() {
+        engine.stop()
+        engine.inputNode.removeTap(onBus: 0)
+        // AVAudioEngine picks up the new input format after a fresh engine instance — reusing
+        // the old one sometimes leaves the input node in the previous configuration.
+        engine = AVAudioEngine()
+        do {
+            try installTapAndStart()
+            NSLog("[MicRecorder] Restarted after configuration change")
+        } catch {
+            NSLog("[MicRecorder] Failed to restart after configuration change: %@", String(describing: error))
+        }
+    }
+
     func stop() {
+        isStopped = true
+        if let observer = configChangeObserver {
+            NotificationCenter.default.removeObserver(observer)
+            configChangeObserver = nil
+        }
         engine.stop()
         engine.inputNode.removeTap(onBus: 0)
         writer.close()
+        NSLog("[MicRecorder] Stopped (total samples written: %d)", totalSamplesWritten)
     }
 }
 

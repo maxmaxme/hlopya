@@ -76,26 +76,49 @@ final class TranscriptionService {
         let micSamples = try converter.resampleAudioFile(path: micPath)
         let sysSamples = try converter.resampleAudioFile(path: sysPath)
 
-        // Echo cancellation
-        print("[Transcription] Removing echo from mic channel...")
-        let cleanedMic = EchoCancellation.removeEcho(
-            micSamples: micSamples,
-            systemSamples: sysSamples
-        )
+        // FluidAudio requires ≥1s of 16kHz audio. If mic capture failed mid-recording
+        // we can still transcribe the system track alone rather than failing the whole session.
+        let minSamples = 16000
+        let micUsable = micSamples.count >= minSamples
+        let sysUsable = sysSamples.count >= minSamples
+        guard micUsable || sysUsable else {
+            throw TranscriptionError.transcriptionFailed("Both mic and system tracks are shorter than 1s (mic: \(micSamples.count) samples, system: \(sysSamples.count) samples)")
+        }
 
-        // Save cleaned mic waveform for display (200 floats = 800 bytes)
-        Self.saveWaveform(cleanedMic, buckets: 200, to: sessionDir.appendingPathComponent("mic_waveform.bin"))
+        var micSegments: [TranscriptSegment] = []
+        var micResultDuration: TimeInterval = 0
 
-        // Transcribe both channels
-        print("[Transcription] Transcribing mic (Me)...")
-        let micResult = try await asr.transcribe(cleanedMic, source: .microphone)
+        if micUsable {
+            // Echo cancellation
+            print("[Transcription] Removing echo from mic channel...")
+            let cleanedMic = EchoCancellation.removeEcho(
+                micSamples: micSamples,
+                systemSamples: sysSamples
+            )
 
-        print("[Transcription] Transcribing system (Them)...")
-        let sysResult = try await asr.transcribe(sysSamples, source: .system)
+            // Save cleaned mic waveform for display (200 floats = 800 bytes)
+            Self.saveWaveform(cleanedMic, buckets: 200, to: sessionDir.appendingPathComponent("mic_waveform.bin"))
 
-        // Build segments from results
-        let micSegments = buildSegments(from: micResult, speaker: "Me")
-        let sysSegments = buildSegments(from: sysResult, speaker: "Them")
+            print("[Transcription] Transcribing mic (Me)...")
+            let micResult = try await asr.transcribe(cleanedMic, source: .microphone)
+            micSegments = buildSegments(from: micResult, speaker: "Me")
+            micResultDuration = micResult.duration
+        } else {
+            NSLog("[Transcription] Skipping mic: only %d samples (<1s) — mic capture likely stopped early", micSamples.count)
+            Self.saveWaveform(micSamples, buckets: 200, to: sessionDir.appendingPathComponent("mic_waveform.bin"))
+        }
+
+        var sysSegments: [TranscriptSegment] = []
+        var sysResultDuration: TimeInterval = 0
+
+        if sysUsable {
+            print("[Transcription] Transcribing system (Them)...")
+            let sysResult = try await asr.transcribe(sysSamples, source: .system)
+            sysSegments = buildSegments(from: sysResult, speaker: "Them")
+            sysResultDuration = sysResult.duration
+        } else {
+            NSLog("[Transcription] Skipping system: only %d samples (<1s)", sysSamples.count)
+        }
 
         // Merge, sort, and deduplicate echo segments
         var allSegments = micSegments + sysSegments
@@ -116,7 +139,7 @@ final class TranscriptionService {
         let elapsed = Date().timeIntervalSince(startTime)
 
         // Duration from ASR results (not segment timestamps which can be 0)
-        let audioDuration = max(micResult.duration, sysResult.duration)
+        let audioDuration = max(micResultDuration, sysResultDuration)
 
         // Overall confidence: weighted average from segments that have confidence
         let segmentsWithConf = allSegments.compactMap(\.confidence)
